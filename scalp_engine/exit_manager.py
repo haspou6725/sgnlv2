@@ -101,6 +101,9 @@ class ExitManager:
         }
         
         self.closed_positions.append(exit_signal)
+        # Limit closed_positions to last 1000 entries to prevent unbounded growth
+        if len(self.closed_positions) > 1000:
+            self.closed_positions = self.closed_positions[-1000:]
         
         logger.info(f"Position exited: {symbol} @ {exit_price} | Reason: {reason} | P&L: {pnl_pct:.2f}%")
         
