@@ -37,7 +37,7 @@ pytest-asyncio==0.21.1
 pytest-cov==4.1.0
 
 # Exchange Clients (optional for direct API access)
-ccxt==4.1.92
+ccxt>=4.0.0
 
 # Logging and Monitoring
 loguru==0.7.2
