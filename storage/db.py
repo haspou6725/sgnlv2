@@ -4,7 +4,7 @@ Handles SQLite caching and MySQL historical storage
 """
 import os
 import sqlite3
-from typing import Dict, List, Optional, Any
+from typing import Dict, List
 from datetime import datetime
 import json
 from loguru import logger
