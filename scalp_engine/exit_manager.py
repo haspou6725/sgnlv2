@@ -1,157 +1,86 @@
-"""
-Exit Manager
-Manages exit logic for active positions (TP/SL/Emergency)
-"""
-from typing import Dict, Optional, List
-from datetime import datetime
-from loguru import logger
+import os
 
 
 class ExitManager:
-    """Manages exits for short scalp positions"""
-    
+    TP_PCT = 1.7
+    SL_PCT_MIN = 0.7
+    SL_PCT_MAX = 1.1
+
     def __init__(self):
-        self.active_positions = {}  # symbol -> position data
-        self.closed_positions = []
-    
-    def add_position(self, signal: Dict):
-        """Add a new position to track"""
-        symbol = signal.get("symbol")
-        if not symbol:
-            return
-        
-        position = {
-            "symbol": symbol,
-            "side": signal.get("side", "SHORT"),
-            "entry": signal.get("entry"),
-            "tp": signal.get("tp"),
-            "sl": signal.get("sl"),
-            "score": signal.get("score"),
-            "entry_time": datetime.now(),
-            "trailing_enabled": False,
-            "highest_profit": 0
-        }
-        
-        self.active_positions[symbol] = position
-        logger.info(f"Position added: {symbol} SHORT @ {position['entry']}")
-    
-    def check_exits(self, market_data: Dict) -> Optional[Dict]:
+        # Trailing config (percent thresholds)
+        self.TRAIL_ACTIVATE_PCT = float(os.getenv("TRAIL_ACTIVATE_PCT", "0.6"))
+        self.TRAIL_GIVEBACK_PCT = float(os.getenv("TRAIL_GIVEBACK_PCT", "0.4"))
+        self.HARD_STOP_LOSS_PCT = float(os.getenv("HARD_STOP_LOSS_PCT", "1.2"))
+
+    def check_exit(self, entry_price: float, current_price: float, features: dict, elapsed_sec: float) -> tuple:
         """
-        Check if any positions should be exited
-        
-        Returns:
-            Exit signal dict or None
+        Returns (should_exit: bool, reason: str, pnl_pct: float).
+        TP = 1.7%, SL = 0.7-1.1%. Trailing is available via trailing_for_short.
         """
-        symbol = market_data.get("symbol")
-        current_price = market_data.get("price", 0)
-        
-        if symbol not in self.active_positions or current_price == 0:
-            return None
-        
-        position = self.active_positions[symbol]
-        entry = position["entry"]
-        tp = position["tp"]
-        sl = position["sl"]
-        
-        # Calculate current P&L %
-        pnl_pct = ((entry - current_price) / entry) * 100  # SHORT: profit when price falls
-        
-        # Update highest profit for trailing
-        if pnl_pct > position["highest_profit"]:
-            position["highest_profit"] = pnl_pct
-        
-        # 1. Check Take Profit
-        if current_price <= tp:
-            return self._exit_position(symbol, current_price, "TP_HIT", pnl_pct)
-        
-        # 2. Check Stop Loss
-        if current_price >= sl:
-            return self._exit_position(symbol, current_price, "SL_HIT", pnl_pct)
-        
-        # 3. Check emergency exits
-        emergency_reason = self._check_emergency_exit(market_data, position)
-        if emergency_reason:
-            return self._exit_position(symbol, current_price, emergency_reason, pnl_pct)
-        
-        # 4. Check trailing stop (optional)
-        if position.get("trailing_enabled") and pnl_pct > 1.0:
-            # If profit > 1% and price retraces 0.3%, exit
-            if pnl_pct < position["highest_profit"] - 0.3:
-                return self._exit_position(symbol, current_price, "TRAILING_STOP", pnl_pct)
-        
-        return None
-    
-    def _exit_position(self, symbol: str, exit_price: float, reason: str, pnl_pct: float) -> Dict:
-        """Exit a position and return exit signal"""
-        if symbol not in self.active_positions:
-            return None
-        
-        position = self.active_positions.pop(symbol)
-        
-        exit_signal = {
-            "symbol": symbol,
-            "action": "EXIT",
-            "reason": reason,
-            "entry": position["entry"],
-            "exit": exit_price,
-            "pnl_pct": round(pnl_pct, 2),
-            "entry_time": position["entry_time"].isoformat(),
-            "exit_time": datetime.now().isoformat(),
-            "duration_seconds": (datetime.now() - position["entry_time"]).total_seconds()
-        }
-        
-        self.closed_positions.append(exit_signal)
-        # Limit closed_positions to last 1000 entries to prevent unbounded growth
-        if len(self.closed_positions) > 1000:
-            self.closed_positions = self.closed_positions[-1000:]
-        
-        logger.info(f"Position exited: {symbol} @ {exit_price} | Reason: {reason} | P&L: {pnl_pct:.2f}%")
-        
-        return exit_signal
-    
-    def _check_emergency_exit(self, market_data: Dict, position: Dict) -> Optional[str]:
+        if not (isinstance(entry_price, (int, float)) and isinstance(current_price, (int, float))):
+            return False, "invalid_price", 0.0
+        if entry_price <= 0 or current_price <= 0:
+            return False, "zero_price", 0.0
+
+        pnl_pct = ((entry_price - current_price) / entry_price) * 100.0  # short pnl
+
+        # TP hit
+        if pnl_pct >= self.TP_PCT:
+            return True, "tp_hit", pnl_pct
+
+        # SL hit (hard stop)
+        if pnl_pct <= -self.SL_PCT_MAX:
+            return True, "sl_hit", pnl_pct
+
+        # Emergency exits
+        btc_flip = features.get("btc_alignment", 0.0) > 0.7  # BTC pumping hard
+        buy_wall = features.get("bid_dom", 0.5) > 0.65  # strong buy pressure
+        vol_burst = features.get("volatility_burst", 0.0) > 0.8
+        oi_collapse = features.get("oi_divergence", 0.0) < -0.3
+
+        if btc_flip:
+            return True, "btc_flip", pnl_pct
+        if buy_wall:
+            return True, "buy_wall", pnl_pct
+        if vol_burst:
+            return True, "vol_burst", pnl_pct
+        if oi_collapse:
+            return True, "oi_collapse", pnl_pct
+
+        # Time stop (optional: exit after 15 min if no TP)
+        if elapsed_sec > 900 and pnl_pct < 0.5:
+            return True, "time_stop", pnl_pct
+
+        return False, "hold", pnl_pct
+
+    def trailing_for_short(self, entry_price: float, current_price: float, best_low: float | None) -> tuple:
         """
-        Check for emergency exit conditions
-        
-        Returns:
-            Reason string or None
+        Short trailing logic. Maintains and returns updated best_low.
+        Returns (should_exit: bool, reason: str, pnl_pct: float, updated_best_low: float, trail_active: bool)
         """
-        # 1. Check if BTC suddenly pumps (would need BTC data)
-        # For now, skip this
-        
-        # 2. Check if liquidity pressure collapses
-        features = market_data.get("features", {})
-        if features:
-            # If orderbook flips bullish suddenly
-            obi = features.get("orderbook_imbalance", 0)
-            if obi < -30:  # Bid-heavy = bullish
-                return "LIQUIDITY_FLIP"
-            
-            # If sweep on bid side (bullish)
-            sweep = features.get("sweep_detected", False)
-            aggressive_sells = features.get("aggressive_sell_ratio", 50)
-            if sweep and aggressive_sells < 30:  # More buys than sells
-                return "BUY_SWEEP"
-        
-        # 3. Check for extended time without profit
-        entry_time = position.get("entry_time")
-        if entry_time:
-            duration = (datetime.now() - entry_time).total_seconds()
-            if duration > 3600:  # 1 hour without hitting TP
-                return "TIMEOUT"
-        
-        return None
-    
-    def get_active_positions(self) -> List[Dict]:
-        """Get all active positions"""
-        return list(self.active_positions.values())
-    
-    def get_closed_positions(self, limit: int = 100) -> List[Dict]:
-        """Get recent closed positions"""
-        return self.closed_positions[-limit:]
-    
-    def enable_trailing(self, symbol: str):
-        """Enable trailing stop for a position"""
-        if symbol in self.active_positions:
-            self.active_positions[symbol]["trailing_enabled"] = True
-            logger.info(f"Trailing stop enabled for {symbol}")
+        if not (isinstance(entry_price, (int, float)) and isinstance(current_price, (int, float))):
+            return False, "invalid_price", 0.0, best_low, False
+        if entry_price <= 0 or current_price <= 0:
+            return False, "zero_price", 0.0, best_low, False
+
+        if best_low is None or best_low <= 0:
+            best_low = entry_price
+
+        updated_best_low = best_low
+        if current_price < best_low:
+            updated_best_low = current_price
+
+        pnl_pct = ((entry_price - current_price) / entry_price) * 100.0
+        peak_pnl_pct = ((entry_price - updated_best_low) / entry_price) * 100.0
+
+        # hard stop if loss exceeds threshold
+        if pnl_pct <= -self.HARD_STOP_LOSS_PCT:
+            return True, "hard_stop", pnl_pct, updated_best_low, False
+
+        trail_active = pnl_pct >= self.TRAIL_ACTIVATE_PCT
+        if trail_active:
+            giveback = peak_pnl_pct - pnl_pct
+            if giveback >= self.TRAIL_GIVEBACK_PCT and peak_pnl_pct >= self.TRAIL_ACTIVATE_PCT:
+                return True, "trailing_giveback", pnl_pct, updated_best_low, True
+
+        return False, "hold", pnl_pct, updated_best_low, trail_active

@@ -21,16 +21,10 @@ chat_id = int(os.getenv('TELEGRAM_CHAT_ID', '0'))
 async def main():
     tg = TelegramNotifier(token, chat_id)
     sym = os.getenv('TEST_SYM', 'TESTUSDT')
-    score = float(os.getenv('TEST_SCORE', '75'))
-    price = float(os.getenv('TEST_PRICE', '0.12345'))
-    feats = {
-        'oi_divergence': 0.2,
-        'liquidity_gap_above': 0.0015,
-        'sweep_rejection': 0.8,
-        'funding_impulse': 0.004,
-        'btc_alignment': 0.2,
-    }
-    ok = await tg.send_signal(sym, score, price, feats)
+    reason = os.getenv('TEST_REASON', 'trailing_giveback')
+    price = float(os.getenv('TEST_PRICE', '0.12000'))
+    pnl = float(os.getenv('TEST_PNL', '1.05'))
+    ok = await tg.send_exit(sym, reason, price, pnl)
     print('sent:', ok)
 
 if __name__ == '__main__':

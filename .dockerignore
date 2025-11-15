@@ -1,0 +1,9 @@
+state/
+**/state/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+.git/
+.venv/
+*.pyc

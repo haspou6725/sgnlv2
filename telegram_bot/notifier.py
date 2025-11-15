@@ -1,159 +1,99 @@
-"""
-Telegram Notification Layer
-Sends alerts with deduplication and rate limiting
-"""
+import aiohttp
 import asyncio
-from typing import Optional
-from datetime import datetime, timedelta
-from loguru import logger
-from telegram import Bot
-from telegram.error import TelegramError
-from telegram_bot.templates import (
-    format_signal_message,
-    format_exit_message,
-    format_health_message,
-    format_daily_summary
-)
-
+import time
+from typing import Dict, Tuple
 
 class TelegramNotifier:
-    """Send notifications via Telegram with smart rate limiting"""
+    COOLDOWN_SEC = 300  # 5 minutes per symbol
+    EXIT_COOLDOWN_SEC = 120  # 2 minutes per symbol for exits
     
-    def __init__(self, bot_token: str, chat_id: str, cooldown_seconds: int = 60):
-        self.bot_token = bot_token
+    def __init__(self, token: str, chat_id: int):
+        self.token = token
         self.chat_id = chat_id
-        self.cooldown_seconds = cooldown_seconds
-        self.bot: Optional[Bot] = None
-        
-        # Deduplication tracking
-        self.sent_signals = {}  # symbol -> last_sent_time
-        self.last_health_message = None
-        
-        # Initialize bot
-        if bot_token and bot_token != "your_telegram_bot_token_here":
-            try:
-                self.bot = Bot(token=bot_token)
-                logger.info("Telegram bot initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize Telegram bot: {e}")
-                self.bot = None
-        else:
-            logger.warning("Telegram bot token not configured - notifications disabled")
+        self._last_signal_ts: Dict[str, float] = {}  # sym -> timestamp
+        self._last_exit_ts: Dict[str, float] = {}  # sym -> timestamp
     
-    async def send_signal(self, signal: dict) -> bool:
-        """Send a signal notification with deduplication"""
-        if not self.bot:
-            logger.debug("Telegram bot not configured, skipping notification")
+    def _should_send(self, sym: str) -> bool:
+        """Check if cooldown allows new signal for symbol."""
+        now = time.time()
+        last = self._last_signal_ts.get(sym, 0.0)
+        return (now - last) >= self.COOLDOWN_SEC
+    
+    def _format_signal(self, sym: str, score: float, entry_price: float, features: dict) -> str:
+        """Format signal message with real metrics."""
+        oi_div = features.get("oi_divergence", 0.0)
+        liq_gap = features.get("liquidity_gap_above", 0.0)
+        sweep = features.get("sweep_rejection", 0.0)
+        funding = features.get("funding_impulse", 0.0)
+        btc = features.get("btc_alignment", 0.0)
+        
+        msg = f"""🔻 SHORT SIGNAL: {sym}
+Score: {score:.1f}/100
+Entry: ${entry_price:.6f}
+TP: +1.7% | SL: -1.1%
+
+📊 Metrics:
+• OI Divergence: {oi_div:.2f}
+• Liq Gap Above: {liq_gap:.2%}
+• Sweep Rejection: {sweep:.2f}
+• Funding: {funding:.3f}
+• BTC Alignment: {btc:.2f}
+
+⏱ {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}"""
+        return msg
+    
+    async def send_signal(self, sym: str, score: float, entry_price: float, features: dict) -> bool:
+        """Send signal with cooldown and formatting. Returns True if sent."""
+        if not self._should_send(sym):
             return False
         
-        symbol = signal.get("symbol", "unknown")
-        
-        # Check cooldown
-        if not self._check_cooldown(symbol):
-            logger.debug(f"Signal for {symbol} in cooldown, skipping")
+        text = self._format_signal(sym, score, entry_price, features)
+        success = await self._send(text)
+        if success:
+            self._last_signal_ts[sym] = time.time()
+        return success
+
+    def _should_send_exit(self, sym: str) -> bool:
+        now = time.time()
+        last = self._last_exit_ts.get(sym, 0.0)
+        return (now - last) >= self.EXIT_COOLDOWN_SEC
+
+    def _format_exit(self, sym: str, reason: str, price: float, pnl_pct: float) -> str:
+        icon = "✅" if pnl_pct >= 0 else "⛔"
+        reason_map = {
+            "tp_hit": "Take Profit",
+            "sl_hit": "Stop Loss",
+            "hard_stop": "Hard Stop",
+            "trailing_giveback": "Trailing Exit",
+            "time_stop": "Time-based Exit",
+        }
+        label = reason_map.get(reason, reason)
+        msg = f"""{icon} EXIT: {sym}
+Reason: {label}
+Exit: ${price:.6f}
+PnL: {pnl_pct:.2f}%
+
+⏱ {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}"""
+        return msg
+
+    async def send_exit(self, sym: str, reason: str, price: float, pnl_pct: float) -> bool:
+        """Send exit notification with a shorter cooldown. Returns True if sent."""
+        if not self._should_send_exit(sym):
             return False
-        
+        text = self._format_exit(sym, reason, price, pnl_pct)
+        success = await self._send(text)
+        if success:
+            self._last_exit_ts[sym] = time.time()
+        return success
+    
+    async def _send(self, text: str) -> bool:
+        """Low-level send to Telegram API."""
+        if not self.token or not self.chat_id:
+            return False
+        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         try:
-            message = format_signal_message(signal)
-            await self.bot.send_message(
-                chat_id=self.chat_id,
-                text=message,
-                parse_mode="HTML"
-            )
-            
-            # Update tracking
-            self.sent_signals[symbol] = datetime.now()
-            logger.info(f"Telegram signal sent for {symbol}")
-            return True
-            
-        except TelegramError as e:
-            logger.error(f"Failed to send Telegram message: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Unexpected error sending Telegram message: {e}")
-            return False
-    
-    async def send_exit(self, exit_data: dict) -> bool:
-        """Send an exit notification"""
-        if not self.bot:
-            return False
-        
-        try:
-            message = format_exit_message(exit_data)
-            await self.bot.send_message(
-                chat_id=self.chat_id,
-                text=message,
-                parse_mode="HTML"
-            )
-            logger.info(f"Telegram exit notification sent for {exit_data.get('symbol')}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send exit notification: {e}")
-            return False
-    
-    async def send_health(self, status: str, details: str = "") -> bool:
-        """Send health status message with rate limiting"""
-        if not self.bot:
-            return False
-        
-        # Rate limit health messages (max 1 per 5 minutes)
-        if self.last_health_message:
-            elapsed = (datetime.now() - self.last_health_message).total_seconds()
-            if elapsed < 300:  # 5 minutes
-                return False
-        
-        try:
-            message = format_health_message(status, details)
-            await self.bot.send_message(
-                chat_id=self.chat_id,
-                text=message,
-                parse_mode="HTML"
-            )
-            self.last_health_message = datetime.now()
-            logger.info(f"Health message sent: {status}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send health message: {e}")
-            return False
-    
-    async def send_daily_summary(self, summary: dict) -> bool:
-        """Send daily performance summary"""
-        if not self.bot:
-            return False
-        
-        try:
-            message = format_daily_summary(summary)
-            await self.bot.send_message(
-                chat_id=self.chat_id,
-                text=message,
-                parse_mode="HTML"
-            )
-            logger.info("Daily summary sent")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send daily summary: {e}")
-            return False
-    
-    def _check_cooldown(self, symbol: str) -> bool:
-        """Check if symbol is in cooldown period"""
-        if symbol not in self.sent_signals:
-            return True
-        
-        last_sent = self.sent_signals[symbol]
-        elapsed = (datetime.now() - last_sent).total_seconds()
-        
-        return elapsed >= self.cooldown_seconds
-    
-    async def test_connection(self) -> bool:
-        """Test Telegram bot connection"""
-        if not self.bot:
-            logger.error("Telegram bot not initialized")
-            return False
-        
-        try:
-            await self.bot.get_me()
-            logger.info("Telegram bot connection test successful")
-            return True
-        except Exception as e:
-            logger.error(f"Telegram bot connection test failed: {e}")
+            async with aiohttp.ClientSession() as s:
+                async with s.post(url, json={"chat_id": self.chat_id, "text": text, "parse_mode": "Markdown"}, timeout=10) as r:
+                    return r.status == 200
+        except Exception:
             return False

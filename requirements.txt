@@ -1,43 +1,8 @@
-# SGNL-V2 Dependencies
-# Python 3.10+
-
-# Async and Core
-aiohttp==3.9.1
-asyncio==3.4.3
-websockets==12.0
-
-# Data Processing
-pandas==2.1.4
-numpy==1.26.2
-
-# Database
-pymysql==1.1.0
-aiomysql==0.2.0
-sqlalchemy==2.0.23
-
-# Telegram
-python-telegram-bot==20.7
-
-# UI Dashboard
-streamlit==1.29.0
-plotly==5.18.0
-
-# Configuration
-python-dotenv==1.0.0
-pydantic==2.5.2
-
-# Utilities
-requests==2.31.0
-pytz==2023.3
-schedule==1.2.0
-
-# Testing
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-
-# Exchange Clients (optional for direct API access)
-ccxt>=4.0.0
-
-# Logging and Monitoring
-loguru==0.7.2
+aiohttp==3.13.2
+websockets==15.0.1
+loguru==0.7.3
+streamlit==1.51.0
+pandas==2.2.3
+numpy==2.1.3
+python-telegram-bot==21.0
+urllib3==2.3.0

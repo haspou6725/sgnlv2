@@ -1,96 +1,29 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
+*.pyo
+*.pyd
+.venv/
 venv/
-ENV/
-env/
-.venv
-
-# Environment Variables
-.env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+*.egg-info/
 .DS_Store
 
-# Logs
-logs/
-*.log
+# Secrets
+.env
+.env.*
 
-# Database
-storage/*.db
-storage/*.db-journal
-*.sqlite
-*.sqlite3
-
-# Docker
-docker-compose.override.yml
-
-# State files
+# State and databases
 state/
-*.pid
-*.sock
+*.db
+*.db-shm
+*.db-wal
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
+# Logs and caches
+*.log
+.cache/
 
-# Jupyter
-.ipynb_checkpoints
+# Snap and misc
+snap/
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Temporary files
-*.tmp
-*.temp
-/tmp/
-
-# Backup files
-*.bak
-*.backup
+# Byte-compiled
+**/__pycache__/
