@@ -2,7 +2,6 @@
 Bybit Futures Data Fetcher
 Fetches orderbook, funding, OI, and trades via REST
 """
-import asyncio
 import aiohttp
 from typing import Dict, List, Optional
 from loguru import logger
