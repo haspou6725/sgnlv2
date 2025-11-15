@@ -4,7 +4,6 @@ Handles SQLite caching and MySQL historical storage
 """
 import os
 import sqlite3
-import asyncio
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import json
