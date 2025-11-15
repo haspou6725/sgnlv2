@@ -2,7 +2,6 @@
 LBank Exchange Data Fetcher
 Fetches orderbook, funding, OI, and trades via REST + WebSocket
 """
-import asyncio
 import aiohttp
 from typing import Dict, List, Optional
 from loguru import logger
