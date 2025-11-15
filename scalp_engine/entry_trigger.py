@@ -3,7 +3,7 @@ Entry Trigger Engine
 Decides when to enter SHORT positions based on scoring and conditions
 """
 from typing import Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from loguru import logger
 
 
