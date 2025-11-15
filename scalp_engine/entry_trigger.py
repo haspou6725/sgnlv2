@@ -100,7 +100,6 @@ class EntryTrigger:
         
         # Calculate TP and SL
         tp_price = entry_price * (1 - tp_pct / 100)  # SHORT: profit when price falls
-        sl_price = entry_price * (1 + sl_pct_max / 100)  # SHORT: stop when price rises
         
         # Adjust SL based on volatility
         volatility = data.get("volatility", 0)
