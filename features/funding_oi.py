@@ -2,7 +2,7 @@
 Funding Rate and Open Interest Analysis
 Tracks funding impulse and OI divergence
 """
-from typing import Dict, Optional
+from typing import Dict
 from collections import deque
 from loguru import logger
 
