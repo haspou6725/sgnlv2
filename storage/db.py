@@ -22,50 +22,49 @@ class SQLiteCache:
     
     def _init_db(self):
         """Initialize SQLite tables"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Last depth snapshot
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS last_depth (
-                symbol TEXT PRIMARY KEY,
-                exchange TEXT,
-                timestamp REAL,
-                bids TEXT,
-                asks TEXT,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Last scores
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS last_scores (
-                symbol TEXT PRIMARY KEY,
-                score REAL,
-                features TEXT,
-                timestamp REAL,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Recent signals (cache)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS last_signals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                symbol TEXT,
-                entry REAL,
-                tp REAL,
-                sl REAL,
-                score REAL,
-                exchange TEXT,
-                timestamp REAL,
-                reasons TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Last depth snapshot
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS last_depth (
+                    symbol TEXT PRIMARY KEY,
+                    exchange TEXT,
+                    timestamp REAL,
+                    bids TEXT,
+                    asks TEXT,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Last scores
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS last_scores (
+                    symbol TEXT PRIMARY KEY,
+                    score REAL,
+                    features TEXT,
+                    timestamp REAL,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Recent signals (cache)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS last_signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT,
+                    entry REAL,
+                    tp REAL,
+                    sl REAL,
+                    score REAL,
+                    exchange TEXT,
+                    timestamp REAL,
+                    reasons TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            conn.commit()
         logger.info(f"SQLite cache initialized at {self.db_path}")
     
     def save_depth(self, symbol: str, exchange: str, bids: List, asks: List):
