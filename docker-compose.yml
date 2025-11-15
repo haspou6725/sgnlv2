@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: sgnlv2_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secure_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-sgnlv2_db}
+      MYSQL_USER: ${MYSQL_USER:-sgnlv2_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-sgnlv2_secure_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - sgnlv2_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # SGNL-V2 Main Application
+  sgnlv2_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sgnlv2_app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+    volumes:
+      - ./logs:/app/logs
+      - ./storage:/app/storage
+      - ./state:/app/state
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - sgnlv2_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Streamlit Dashboard
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sgnlv2_dashboard
+    restart: unless-stopped
+    command: streamlit run ui/dashboard.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      - sgnlv2_app
+    networks:
+      - sgnlv2_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  sgnlv2_network:
+    driver: bridge
