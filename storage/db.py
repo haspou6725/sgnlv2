@@ -15,7 +15,7 @@ import aiomysql
 class SQLiteCache:
     """Local SQLite cache for real-time data"""
     
-    def __init__(self, db_path: str = "/home/runner/work/sgnlv2/sgnlv2/storage/sqlite_cache.db"):
+    def __init__(self, db_path: str = "storage/sqlite_cache.db"):
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._init_db()
