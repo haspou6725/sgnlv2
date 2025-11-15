@@ -70,91 +70,86 @@ class SQLiteCache:
     
     def save_depth(self, symbol: str, exchange: str, bids: List, asks: List):
         """Save orderbook depth snapshot"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT OR REPLACE INTO last_depth (symbol, exchange, timestamp, bids, asks, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            symbol,
-            exchange,
-            datetime.now().timestamp(),
-            json.dumps(bids),
-            json.dumps(asks),
-            datetime.now()
-        ))
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT OR REPLACE INTO last_depth (symbol, exchange, timestamp, bids, asks, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                symbol,
+                exchange,
+                datetime.now().timestamp(),
+                json.dumps(bids),
+                json.dumps(asks),
+                datetime.now()
+            ))
+            
+            conn.commit()
     
     def save_score(self, symbol: str, score: float, features: Dict):
         """Save scoring data"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT OR REPLACE INTO last_scores (symbol, score, features, timestamp, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            symbol,
-            score,
-            json.dumps(features),
-            datetime.now().timestamp(),
-            datetime.now()
-        ))
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT OR REPLACE INTO last_scores (symbol, score, features, timestamp, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                symbol,
+                score,
+                json.dumps(features),
+                datetime.now().timestamp(),
+                datetime.now()
+            ))
+            
+            conn.commit()
     
     def save_signal(self, signal: Dict):
         """Save signal to cache"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO last_signals (symbol, entry, tp, sl, score, exchange, timestamp, reasons)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            signal['symbol'],
-            signal['entry'],
-            signal['tp'],
-            signal['sl'],
-            signal['score'],
-            signal['exchange'],
-            datetime.now().timestamp(),
-            json.dumps(signal.get('reasons', []))
-        ))
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO last_signals (symbol, entry, tp, sl, score, exchange, timestamp, reasons)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                signal['symbol'],
+                signal['entry'],
+                signal['tp'],
+                signal['sl'],
+                signal['score'],
+                signal['exchange'],
+                datetime.now().timestamp(),
+                json.dumps(signal.get('reasons', []))
+            ))
+            
+            conn.commit()
     
     def get_last_signals(self, limit: int = 10) -> List[Dict]:
         """Retrieve recent signals"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT * FROM last_signals
-            ORDER BY timestamp DESC
-            LIMIT ?
-        """, (limit,))
-        
-        rows = cursor.fetchall()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT * FROM last_signals
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (limit,))
+            
+            rows = cursor.fetchall()
         
         return [dict(row) for row in rows]
     
     def get_scores(self) -> List[Dict]:
         """Get all cached scores"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM last_scores ORDER BY score DESC")
-        rows = cursor.fetchall()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT * FROM last_scores ORDER BY score DESC")
+            rows = cursor.fetchall()
         
         return [dict(row) for row in rows]
 
